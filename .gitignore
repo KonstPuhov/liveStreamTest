@@ -1,0 +1,5 @@
+#git rm --cached myfile
+client
+server
+*.o
+workspace.code-workspace
