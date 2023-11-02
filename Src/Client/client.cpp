@@ -16,8 +16,7 @@
 #include <random>
 
 #include <common.h>
-#include <packet.h>
-#include "class.h"
+#include <classes.h>
 
 // Структура параметров из ргументов командной строки
 static struct {
@@ -129,12 +128,12 @@ static void run() {
     for(size_t i=0; i<packNum; i++)
         loto[i] = i;
     // перемешать
-    std::shuffle(&loto[0], &loto[packNum-1], std::default_random_engine());
+    std::shuffle(&loto[0], &loto[packNum], std::default_random_engine());
 
 	// Читать файл и посылать пакеты серверу
 	for(size_t i=0;i<packNum && !quit;i++)  {
 		auto block = ffile.GetBlock(loto[i]);
-		auto data = pack.Pack(block.buf, block.bufSize, loto[i]);
+		auto data = pack.Pack(SPacker::eREQ, block.buf, block.bufSize, loto[i]);
 
 		if (sendto(sock, data, MTU, 0 , (struct sockaddr *) &sinServ, sizeof sinServ)==-1)
 		{

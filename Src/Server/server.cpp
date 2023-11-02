@@ -11,9 +11,10 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <signal.h>
+#include <map>
 
 #include <common.h>
-#include <packet.h>
+#include <classes.h>
 
 // Структура параметров из ргументов командной строки
 static struct {
@@ -130,9 +131,26 @@ int main(int argc, char **argv)
 
 // Обработчик пакета
 static void* thrServe(void *data) {
-	TServData *servHd = (TServData*)data;
-	SPackHeader *packHd = (SPackHeader*)servHd->buf;
-	debug("get seq%d[%d] from %x\n", packHd->seq_number, packHd->pay_size, servHd->peerAdr.sin_addr.s_addr);
-	delete data;
+	typedef byte tBlock[PAYLOAD_SIZE];
+	std::map<uint64_t, tBlock*> map;
+	static CPacker packer;
+
+	TServData *servdt = (TServData*)data; 
+	SPacket *netPack = (SPacket*)servdt->buf;
+	auto hdr = packer.Unpack(servdt->buf);
+
+	tBlock *blocks;
+	auto f = map.find(hdr.id.ui64);
+	if(f==map.end()) {
+		blocks = new tBlock[hdr.seq_total];
+		map[hdr.id.ui64] = blocks;
+	} else
+		blocks = f->second;
+	memcpy(&blocks[hdr.seq_number], netPack->payload, PAYLOAD_SIZE);
+
+	debug("get seq%d[%d] from %x\n", hdr.seq_number, hdr.pay_size,
+		servdt->peerAdr.sin_addr.s_addr);
+
+	delete servdt;
 	return NULL;
 }
