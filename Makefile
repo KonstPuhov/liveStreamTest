@@ -4,6 +4,7 @@ LDFLAGS =  -fsanitize=address
 
 H_COM = $(shell find Src/Common -name '*.h')
 SRC_S = $(shell find Src/Server -name '*.cpp')
+SRC_S += $(shell find Src/Common -name '*.cpp')
 H_S = $(shell find Src/Server -name '*.h')
 SRC_C = $(shell find Src/Client -name '*.cpp')
 SRC_C += $(shell find Src/Common -name '*.cpp')

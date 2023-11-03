@@ -8,25 +8,23 @@
 #include "classes.h"
 #include <arpa/inet.h>
 
-// Упаковщик исходных данных в формат сетевого пакета 
 byte* CPacker::Pack(int _type, byte *payload, size_t paySize, uint32_t seqNum) {
     static byte buf[MTU];
     SPackHeader *net = (SPackHeader*)buf;
 
-    if(paySize > PAYLOAD_SIZE)
-        paySize = PAYLOAD_SIZE;
+    if(paySize > PAYLOAD_MAXSIZE)
+        paySize = PAYLOAD_MAXSIZE;
 
     net->id.ui32[0] = htonl(h.id.ui32[0]);
     net->id.ui32[1] = htonl(h.id.ui32[1]);
     net->seq_number = htonl(seqNum);
     net->seq_total = htonl(h.seq_total);
-    net->pay_size = htons(paySize);
     net->type = _type;
     memcpy(buf+sizeof(SPackHeader), payload, paySize);
 
     return buf;
 }
-// Распаковывает сетевой пакет
+
 CPacker::SHead& CPacker::Unpack(byte *netPack) {
     SPacket *net = (SPacket*)netPack;
 
@@ -34,7 +32,6 @@ CPacker::SHead& CPacker::Unpack(byte *netPack) {
     h.id.ui32[1] = ntohl(net->header.id.ui32[1]);
     h.seq_number = ntohl(net->header.seq_number);
     h.seq_total = ntohl(net->header.seq_total);
-    h.pay_size = ntohs(net->header.pay_size);
     h.type = net->header.type;
     return h;
 }
@@ -73,4 +70,14 @@ void CFragmFile::Close() {
         throw strerror(errno);
 
     return SBlock(popBuf, size);
+}
+
+void CSequence::Put(size_t chunkIdx, byte *chunk, size_t size) {
+    if(chunkIdx==chunkNum-1)
+        lastChunkSize = size;
+    if(find(chunkIdx)==end()){
+        memcpy(&chunks[chunkIdx], chunk, size);
+        insert(chunkIdx);
+        total_seq++;
+    }
 }

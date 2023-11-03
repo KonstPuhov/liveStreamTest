@@ -54,6 +54,7 @@ struct TServData {
 	struct sockaddr_in peerAdr;
 	socklen_t slen;
 	byte buf[MTU];
+	ssize_t recvSize;
 	TServData(): slen(sizeof peerAdr){}
 };
 
@@ -105,15 +106,14 @@ int main(int argc, char **argv)
 
 	// Читать сокет и запускать нить на обработку пакета
 	for(;!quit;)  {
-		int recvLen;
 		TServData  *sd = new TServData();
-		if ((recvLen = recvfrom(listener, sd->buf, MTU, 0, (struct sockaddr *) &sd->peerAdr, &sd->slen)) == -1) {
+		if ((sd->recvSize = recvfrom(listener, sd->buf, MTU, 0, (struct sockaddr *) &sd->peerAdr, &sd->slen)) == -1) {
 			log("recvfrom(), %s\n", strerror(errno));
 			delete sd;
 			continue;
 		}
-		debug("recvLen=%d\n", recvLen);
-		if(recvLen==0) {
+		debug("recvLen=%d\n", sd->recvSize);
+		if(sd->recvSize==0) {
 			delete sd;
 			continue;
 		}
@@ -131,24 +131,30 @@ int main(int argc, char **argv)
 
 // Обработчик пакета
 static void* thrServe(void *data) {
-	typedef byte tBlock[PAYLOAD_SIZE];
-	std::map<uint64_t, tBlock*> map;
+	std::map<uint64_t, CSequence*> map;
 	static CPacker packer;
 
-	TServData *servdt = (TServData*)data; 
+	// пакет с префиксом от сервера
+	TServData *servdt = (TServData*)data;
+	// собственно пакет 
 	SPacket *netPack = (SPacket*)servdt->buf;
+
+	// Распаковать заголовок пакета
 	auto hdr = packer.Unpack(servdt->buf);
 
-	tBlock *blocks;
+	// Найти серию по ID
+	CSequence *series;
 	auto f = map.find(hdr.id.ui64);
+	// Если серии с таким ID ещё нет, то создать 
 	if(f==map.end()) {
-		blocks = new tBlock[hdr.seq_total];
-		map[hdr.id.ui64] = blocks;
+		series = new CSequence(hdr.seq_total);
+		map[hdr.id.ui64] = series;
 	} else
-		blocks = f->second;
-	memcpy(&blocks[hdr.seq_number], netPack->payload, PAYLOAD_SIZE);
+		series = f->second;
+	// Положить чанк в массив по своему адресу
+	series->Put(hdr.seq_number, netPack->payload, PAY_SIZE(servdt->recvSize));
 
-	debug("get seq%d[%d] from %x\n", hdr.seq_number, hdr.pay_size,
+	debug("get seq%d[%d] from %x\n", hdr.seq_number, PAY_SIZE(servdt->recvSize),
 		servdt->peerAdr.sin_addr.s_addr);
 
 	delete servdt;

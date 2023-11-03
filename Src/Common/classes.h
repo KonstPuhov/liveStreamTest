@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "common.h"
 #include <stdlib.h>
+#include <set>
 
 #pragma pack(push, 1)
 union uFileID {
@@ -19,22 +20,24 @@ struct SPackHeader{
 #pragma pack(pop)
 
 const int MTU = 1500-28;
-const int PAYLOAD_SIZE = MTU - sizeof(SPackHeader);
+const int PAYLOAD_MAXSIZE = MTU - sizeof(SPackHeader);
+#define PACK_SIZE(payloadSize)  (sizeof(SPackHeader)+(payloadSize))
+#define PAY_SIZE(packSize)  ((packSize) - sizeof(SPackHeader))
 
 struct SPacket{
     SPackHeader header;
-    byte payload[PAYLOAD_SIZE];
+    byte payload[PAYLOAD_MAXSIZE];
 };
 
+// Упаковывает и распаковывает заголовки сетевых пакетов 
 class CPacker {
-    enum { eREQ, eACK };
 public:
+    enum { eREQ, eACK };
     struct SHead {
         uint32_t seq_number; // номер пакета
         uint32_t seq_total; // количество пакетов с данными
         uint8_t type; // тип пакета: 0 == ACK, 1 == PUT
         uFileID id; // 8 байт - идентификатор, отличающий один файл от другого
-        uint16_t pay_size; // payload size
     };
 private:
     SHead h;
@@ -45,10 +48,13 @@ public:
         h.seq_total = _total;
         h.type = eREQ;
     }
+    // Упаковщик блока в формат сетевого пакета 
     byte *Pack(int _type, byte *data, size_t paySize, uint32_t seqNum);
+    // Распаковывает заголовок сетевого пакета
     SHead& Unpack(byte *netPack);
 };
 
+// Загрузчик файла с разбивкой на блоки
 class CFragmFile {
     size_t blkSize, totalBlkNum;
     int fd;
@@ -70,3 +76,19 @@ public:
     SBlock GetBlock(size_t blkIdx);
     size_t GetTotal() { return totalBlkNum; }
 };
+
+// Контейнер для входящих пакетов
+class CSequence: public std::set<size_t> {
+    typedef byte tChunk[PAYLOAD_MAXSIZE];
+	size_t chunkNum;    // размер контейнера в блоках
+	uint32_t total_seq; // счётчик пришедших блоков
+	int lastChunkSize;  // последний блок может быть урезан, здесь его размер
+	tChunk *chunks; // блоки
+public:
+	CSequence(size_t _chunkNum): chunkNum(_chunkNum), total_seq(0), lastChunkSize(-1) {
+		chunks = new tChunk[_chunkNum];
+	}
+	void Put(size_t chunkIdx, byte *chunk, size_t size);
+    bool IsFull() { return chunkNum==total_seq; }
+};
+

@@ -133,9 +133,9 @@ static void run() {
 	// Читать файл и посылать пакеты серверу
 	for(size_t i=0;i<packNum && !quit;i++)  {
 		auto block = ffile.GetBlock(loto[i]);
-		auto data = pack.Pack(SPacker::eREQ, block.buf, block.bufSize, loto[i]);
+		auto data = pack.Pack(CPacker::eREQ, block.buf, block.bufSize, loto[i]);
 
-		if (sendto(sock, data, MTU, 0 , (struct sockaddr *) &sinServ, sizeof sinServ)==-1)
+		if (sendto(sock, data, PACK_SIZE(block.bufSize), 0 , (struct sockaddr *) &sinServ, sizeof sinServ)==-1)
 		{
 			log("recvfrom(), %s\n", strerror(errno));
 			continue;
