@@ -51,6 +51,7 @@ static void initSignals(void)
 }
 
 struct TServData {
+	int sockFd;
 	struct sockaddr_in peerAdr;
 	socklen_t slen;
 	byte buf[MTU];
@@ -59,6 +60,7 @@ struct TServData {
 };
 
 static void* thrServe(void *frame);
+static void sendAck(TServData *servdt, CPacker::SHead *hdr, CSequence *series);
 
 int main(int argc, char **argv)
 {
@@ -106,7 +108,8 @@ int main(int argc, char **argv)
 
 	// Читать сокет и запускать нить на обработку пакета
 	for(;!quit;)  {
-		TServData  *sd = new TServData();
+		TServData  *sd = new TServData;
+		sd->sockFd = listener;
 		if ((sd->recvSize = recvfrom(listener, sd->buf, MTU, 0, (struct sockaddr *) &sd->peerAdr, &sd->slen)) == -1) {
 			log("recvfrom(), %s\n", strerror(errno));
 			delete sd;
@@ -154,9 +157,32 @@ static void* thrServe(void *data) {
 	// Положить чанк в массив по своему адресу
 	series->Put(hdr.seq_number, netPack->payload, PAY_SIZE(servdt->recvSize));
 
+	// Ответить серверу
+	hdr.type = CPacker::eACK;
+	hdr.seq_number = series->GetTotal();
+	// ... остальные поля заголовка остались такими же как в запросе
+	sendAck(servdt, &hdr, series);
+
 	debug("get seq%d[%d] from %x\n", hdr.seq_number, PAY_SIZE(servdt->recvSize),
 		servdt->peerAdr.sin_addr.s_addr);
 
 	delete servdt;
 	return NULL;
+}
+
+static void sendAck(TServData *sd, CPacker::SHead *hdr, CSequence *series) {
+	CPacker pack(hdr->id.ui64, hdr->seq_total);
+	byte *ack;
+	size_t paySz = 0;
+
+	if(series->IsFull()) {
+		// Ответ на последний пакет сессии
+		auto crc = series->GetCRC();
+		ack = pack.Pack(CPacker::eACK, (byte*)&crc, sizeof crc, hdr->seq_number);
+	}
+	else
+		ack = pack.Pack(CPacker::eACK, NULL, 0, hdr->seq_number);
+
+	if (sendto(sd->sockFd, ack, PACK_SIZE(paySz), 0 , (struct sockaddr *)&sd->peerAdr, sd->slen)==-1)
+		log("sendto(), %s\n", strerror(errno));
 }

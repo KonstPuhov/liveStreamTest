@@ -10,6 +10,7 @@ union uFileID {
     uint32_t ui32[2];
     uint64_t ui64;
 };
+// Пакеты REQ и ACK имеют одинаковый заголовок
 struct SPackHeader{
     uint32_t seq_number; // номер пакета
     uint32_t seq_total; // количество пакетов с данными
@@ -56,7 +57,8 @@ public:
 
 // Загрузчик файла с разбивкой на блоки
 class CFragmFile {
-    size_t blkSize, totalBlkNum;
+    size_t blkSize;
+    uint32_t totalBlkNum;
     int fd;
     off_t fsize;
     uint8_t *popBuf;
@@ -74,7 +76,7 @@ public:
     void Close();
     bool IsOpened() { return popBuf!=NULL; }
     SBlock GetBlock(size_t blkIdx);
-    size_t GetTotal() { return totalBlkNum; }
+    uint32_t GetTotal() { return totalBlkNum; }
 };
 
 // Контейнер для входящих пакетов
@@ -90,5 +92,7 @@ public:
 	}
 	void Put(size_t chunkIdx, byte *chunk, size_t size);
     bool IsFull() { return chunkNum==total_seq; }
+    uint32_t GetTotal() { return total_seq; }
+    uint32_t GetCRC();
 };
 

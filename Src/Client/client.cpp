@@ -137,7 +137,7 @@ static void run() {
 
 		if (sendto(sock, data, PACK_SIZE(block.bufSize), 0 , (struct sockaddr *) &sinServ, sizeof sinServ)==-1)
 		{
-			log("recvfrom(), %s\n", strerror(errno));
+			log("sendto(), %s\n", strerror(errno));
 			continue;
 		}
 		debug("send %u bytes, seq_num=%u\n", block.bufSize, loto[i]);

@@ -81,3 +81,16 @@ void CSequence::Put(size_t chunkIdx, byte *chunk, size_t size) {
         total_seq++;
     }
 }
+
+uint32_t CSequence::GetCRC() {
+    int k;
+    uint32_t crc = ~0;
+    size_t len = chunkNum>1? (chunkNum-1)*PAYLOAD_MAXSIZE+lastChunkSize : lastChunkSize;
+    byte *buf = (byte*)chunks;
+    while (len--) {
+        crc ^= *buf++;
+        for (k = 0; k < 8; k++)
+        crc = crc & 1 ? (crc >> 1) ^ 0x82f63b78 : crc >> 1;
+    }
+    return ~crc;
+}
