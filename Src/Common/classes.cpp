@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include "classes.h"
 #include <arpa/inet.h>
+#include <fstream>
 
 byte* CPacker::Pack(int _type, byte *payload, size_t paySize, uint32_t seqNum) {
     static byte buf[MTU];
@@ -36,43 +37,7 @@ CPacker::SHead& CPacker::Unpack(byte *netPack) {
     return h;
 }
 
-void CFragmFile::Open(const char* fName, size_t blockSz) {
-    if(IsOpened())
-        throw (char*)"already opened";
-    struct stat st;
-    if(stat(fName, &st) < 0)
-        throw strerror(errno);
-    if(fd = open(fName, O_RDONLY); fd < 0)    
-        throw strerror(errno);
-
-    totalBlkNum = st.st_size%blockSz ? st.st_size/blockSz + 1 : st.st_size/blockSz;
-    blkSize = blockSz;
-    fsize = st.st_size;
-    popBuf = new uint8_t[blkSize];
-}
-void CFragmFile::Close() {
-    if(!IsOpened())
-        throw (char*)"not opened";
-    delete []popBuf;
-}
-
- CFragmFile::SBlock CFragmFile::GetBlock(size_t blkIdx) {
-    if(!IsOpened())
-        throw (char*)"not opened";
-
-    if(lseek(fd, (blkIdx+1)*blkSize, SEEK_SET) < 1)
-        throw strerror(errno);
-
-    auto size = blkIdx==totalBlkNum-1?  fsize%blkSize : blkSize;
-    if(!size) size = blkSize;
-
-    if(read(fd, popBuf, blkSize) < 0)
-        throw strerror(errno);
-
-    return SBlock(popBuf, size);
-}
-
-void CSequence::Put(size_t chunkIdx, byte *chunk, size_t size) {
+void CSequence::PutBlock(size_t chunkIdx, byte *chunk, size_t size) {
     if(chunkIdx==chunkNum-1)
         lastChunkSize = size;
     if(find(chunkIdx)==end()){
@@ -85,7 +50,7 @@ void CSequence::Put(size_t chunkIdx, byte *chunk, size_t size) {
 uint32_t CSequence::GetCRC() {
     int k;
     uint32_t crc = ~0;
-    size_t len = chunkNum>1? (chunkNum-1)*PAYLOAD_MAXSIZE+lastChunkSize : lastChunkSize;
+    size_t len = chunkNum>1? (chunkNum-1)*cBlkSize+lastChunkSize : lastChunkSize;
     byte *buf = (byte*)chunks;
     while (len--) {
         crc ^= *buf++;
@@ -93,4 +58,35 @@ uint32_t CSequence::GetCRC() {
         crc = crc & 1 ? (crc >> 1) ^ 0x82f63b78 : crc >> 1;
     }
     return ~crc;
+}
+
+CSequence::CSequence(const char *fName){
+    using namespace std;
+    fstream f;
+    f.open(fName, fstream::in | fstream::out | fstream::binary);
+    if(!f.is_open())
+        throw "file open error";
+    auto size = f.tellg();
+    if(size<=0)
+        throw "file is empty";
+    // Количество блоков, учитывая остаток
+    chunkNum = size%cBlkSize ? size/cBlkSize + 1 : size/cBlkSize;
+    // Выделить память под блоки
+	chunks = new tChunk[chunkNum];
+
+    for(uint32_t i=0; !f.eof(); i++) {
+        ::byte buf[cBlkSize];
+        f.read((char*)buf, cBlkSize);
+        PutBlock(i, buf, f.gcount());
+    }
+    f.close();
+}
+
+CSequence::SBlock CSequence::GetBlock(uint32_t idx) {
+    if(find(idx)==end())
+        return SBlock{NULL, 0};
+    SBlock b;
+    b.chunk = chunks[idx];
+    b.size = idx==chunkNum-1 ? lastChunkSize : cBlkSize;
+    return b;
 }

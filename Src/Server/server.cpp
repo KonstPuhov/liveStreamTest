@@ -155,7 +155,7 @@ static void* thrServe(void *data) {
 	} else
 		series = f->second;
 	// Положить чанк в массив по своему адресу
-	series->Put(hdr.seq_number, netPack->payload, PAY_SIZE(servdt->recvSize));
+	series->PutBlock(hdr.seq_number, netPack->payload, PAY_SIZE(servdt->recvSize));
 
 	// Ответить серверу
 	hdr.type = CPacker::eACK;

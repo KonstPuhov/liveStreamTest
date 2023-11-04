@@ -55,44 +55,30 @@ public:
     SHead& Unpack(byte *netPack);
 };
 
-// Загрузчик файла с разбивкой на блоки
-class CFragmFile {
-    size_t blkSize;
-    uint32_t totalBlkNum;
-    int fd;
-    off_t fsize;
-    uint8_t *popBuf;
-public:
-    struct SBlock {
-        uint8_t *buf; // содержимое блока
-        size_t bufSize; // размер содержимого (если блок последний, то размер может быть меньше заданного)
-        SBlock(uint8_t *_buf,size_t _bufSize):
-            buf(_buf), bufSize(_bufSize) {}
-    };
-public:
-    CFragmFile() : popBuf(NULL) {}
-    ~CFragmFile() { if(IsOpened()) Close(); }
-    void Open(const char *fName, size_t blockSz);
-    void Close();
-    bool IsOpened() { return popBuf!=NULL; }
-    SBlock GetBlock(size_t blkIdx);
-    uint32_t GetTotal() { return totalBlkNum; }
-};
-
 // Контейнер для входящих пакетов
 class CSequence: public std::set<size_t> {
-    typedef byte tChunk[PAYLOAD_MAXSIZE];
-	size_t chunkNum;    // размер контейнера в блоках
+    static const size_t cBlkSize = PAYLOAD_MAXSIZE;
+    typedef byte tChunk[cBlkSize];
+	uint32_t chunkNum;    // размер контейнера в блоках
 	uint32_t total_seq; // счётчик пришедших блоков
 	int lastChunkSize;  // последний блок может быть урезан, здесь его размер
 	tChunk *chunks; // блоки
 public:
-	CSequence(size_t _chunkNum): chunkNum(_chunkNum), total_seq(0), lastChunkSize(-1) {
+    // Конструктор для сервера. Создаётся пустая серия.
+	CSequence(uint32_t _chunkNum): chunkNum(_chunkNum), total_seq(0), lastChunkSize(-1) {
 		chunks = new tChunk[_chunkNum];
 	}
-	void Put(size_t chunkIdx, byte *chunk, size_t size);
+    // Конструктор для клиента. Серия заполняется из файла.
+    CSequence(const char *fName);
+	void PutBlock(size_t idx, byte *chunk, size_t size);
     bool IsFull() { return chunkNum==total_seq; }
     uint32_t GetTotal() { return total_seq; }
     uint32_t GetCRC();
+
+    struct SBlock {
+        uint8_t *chunk; // содержимое блока
+        size_t size; // размер содержимого (если блок последний, то размер может быть меньше заданного)
+    };
+    SBlock GetBlock(uint32_t idx);
 };
 

@@ -117,8 +117,7 @@ static void run() {
 	initSignals();
 	log("begin ...\n");
 
-	CFragmFile ffile;
-	ffile.Open(args.fileName,1024);
+	CSequence ffile(args.fileName);
 	auto packNum = ffile.GetTotal(); // количество пакетов 
 	CPacker pack(getpid(), packNum);
 
@@ -133,14 +132,15 @@ static void run() {
 	// Читать файл и посылать пакеты серверу
 	for(size_t i=0;i<packNum && !quit;i++)  {
 		auto block = ffile.GetBlock(loto[i]);
-		auto data = pack.Pack(CPacker::eREQ, block.buf, block.bufSize, loto[i]);
+		auto data = pack.Pack(CPacker::eREQ, block.chunk, block.size, loto[i]);
 
-		if (sendto(sock, data, PACK_SIZE(block.bufSize), 0 , (struct sockaddr *) &sinServ, sizeof sinServ)==-1)
+		// Отправка REQ
+		if (sendto(sock, data, PACK_SIZE(block.size), 0 , (struct sockaddr *) &sinServ, sizeof sinServ)==-1)
 		{
 			log("sendto(), %s\n", strerror(errno));
 			continue;
 		}
-		debug("send %u bytes, seq_num=%u\n", block.bufSize, loto[i]);
+		debug("send %u bytes, seq_num=%u\n", block.size, loto[i]);
 	}
 	delete []loto;
 }
