@@ -52,7 +52,7 @@ static void initSignals(void)
 
 struct TServData {
 	int sockFd;
-	struct sockaddr_in peerAdr;
+	sockaddr_in peerAdr;
 	socklen_t slen;
 	byte buf[MTU];
 	ssize_t recvSize;
@@ -88,7 +88,7 @@ int main(int argc, char **argv)
 
 	// создать сервисный сокет на данный порт
 	int listener;
-	struct sockaddr_in sinMy;
+	sockaddr_in sinMy;
 
 	listener = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if(listener < 0) {
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 	sinMy.sin_family = AF_INET;
 	sinMy.sin_port = htons(args.port);
 	sinMy.sin_addr.s_addr = htonl(INADDR_ANY);
-	assert(bind(listener, (struct sockaddr *)&sinMy, sizeof(sockaddr_in)) != -1);
+	assert(bind(listener, (sockaddr*)&sinMy, sizeof(sockaddr_in)) != -1);
 	log("bind OK\n");
 
 	initSignals();
@@ -110,7 +110,7 @@ int main(int argc, char **argv)
 	for(;!quit;)  {
 		TServData  *sd = new TServData;
 		sd->sockFd = listener;
-		if ((sd->recvSize = recvfrom(listener, sd->buf, MTU, 0, (struct sockaddr *) &sd->peerAdr, &sd->slen)) == -1) {
+		if ((sd->recvSize = recvfrom(listener, sd->buf, MTU, 0, (sockaddr*) &sd->peerAdr, &sd->slen)) == -1) {
 			log("recvfrom(), %s\n", strerror(errno));
 			delete sd;
 			continue;
@@ -183,6 +183,6 @@ static void sendAck(TServData *sd, CPacker::SHead *hdr, CSequence *series) {
 	else
 		ack = pack.Pack(CPacker::eACK, NULL, 0, hdr->seq_number);
 
-	if (sendto(sd->sockFd, ack, PACK_SIZE(paySz), 0 , (struct sockaddr *)&sd->peerAdr, sd->slen)==-1)
+	if (sendto(sd->sockFd, ack, PACK_SIZE(paySz), 0 , (sockaddr *)&sd->peerAdr, sd->slen)==-1)
 		log("sendto(), %s\n", strerror(errno));
 }

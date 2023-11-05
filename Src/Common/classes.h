@@ -16,7 +16,6 @@ struct SPackHeader{
     uint32_t seq_total; // количество пакетов с данными
     uint8_t type; // тип пакета: 0 == ACK, 1 == PUT
     uFileID id; // 8 байт - идентификатор, отличающий один файл от другого
-    uint16_t pay_size; // payload size
 };
 #pragma pack(pop)
 
@@ -27,7 +26,10 @@ const int PAYLOAD_MAXSIZE = MTU - sizeof(SPackHeader);
 
 struct SPacket{
     SPackHeader header;
+    union {
     byte payload[PAYLOAD_MAXSIZE];
+    uint32_t crc;
+    };
 };
 
 // Упаковывает и распаковывает заголовки сетевых пакетов 
@@ -53,6 +55,7 @@ public:
     byte *Pack(int _type, byte *data, size_t paySize, uint32_t seqNum);
     // Распаковывает заголовок сетевого пакета
     SHead& Unpack(byte *netPack);
+    uint64_t GetID() { return h.id.ui64; }
 };
 
 // Контейнер для входящих пакетов
@@ -64,8 +67,9 @@ class CSequence: public std::set<size_t> {
 	int lastChunkSize;  // последний блок может быть урезан, здесь его размер
 	tChunk *chunks; // блоки
 public:
+    ~CSequence() { if(chunks) delete[] chunks; }
     // Конструктор для сервера. Создаётся пустая серия.
-	CSequence(uint32_t _chunkNum): chunkNum(_chunkNum), total_seq(0), lastChunkSize(-1) {
+	CSequence(uint32_t _chunkNum): chunkNum(_chunkNum), total_seq(0), lastChunkSize(-1), chunks(NULL) {
 		chunks = new tChunk[_chunkNum];
 	}
     // Конструктор для клиента. Серия заполняется из файла.
