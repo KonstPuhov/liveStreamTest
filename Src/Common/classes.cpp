@@ -21,7 +21,8 @@ byte* CPacker::Pack(int _type, byte *payload, size_t paySize, uint32_t seqNum) {
     net->seq_number = htonl(seqNum);
     net->seq_total = htonl(h.seq_total);
     net->type = _type;
-    memcpy(buf+sizeof(SPackHeader), payload, paySize);
+    if(payload && paySize)
+        memcpy(buf+sizeof(SPackHeader), payload, paySize);
 
     return buf;
 }
@@ -52,23 +53,30 @@ uint32_t CSequence::GetCRC() {
     uint32_t crc = ~0;
     size_t len = chunkNum>1? (chunkNum-1)*cBlkSize+lastChunkSize : lastChunkSize;
     byte *buf = (byte*)chunks;
+    debug("calc CRC of %d bytes...\n", len);
     while (len--) {
         crc ^= *buf++;
         for (k = 0; k < 8; k++)
         crc = crc & 1 ? (crc >> 1) ^ 0x82f63b78 : crc >> 1;
     }
+    debug("CRC = %X\n", ~crc);
     return ~crc;
 }
 
 CSequence::CSequence(const char *fName){
+    // Сначала определить размер файла
+    struct stat st;
+    if(stat(fName, &st) < 0)
+        throw (const char*)strerror(errno);
+    size_t size = st.st_size;
+    if(!size)
+        throw "file is empty";
+
     using namespace std;
     fstream f;
     f.open(fName, fstream::in | fstream::out | fstream::binary);
     if(!f.is_open())
         throw "file open error";
-    auto size = f.tellg();
-    if(size<=0)
-        throw "file is empty";
     // Количество блоков, учитывая остаток
     chunkNum = size%cBlkSize ? size/cBlkSize + 1 : size/cBlkSize;
     // Выделить память под блоки
@@ -89,4 +97,15 @@ CSequence::SBlock CSequence::GetBlock(uint32_t idx) {
     b.chunk = chunks[idx];
     b.size = idx==chunkNum-1 ? lastChunkSize : cBlkSize;
     return b;
+}
+
+void CSequence::StoreToFile(const char *fileName) {
+    using namespace std;
+    fstream f;
+    f.open(fileName, fstream::out | fstream::binary);
+    if(!f.is_open())
+        throw "file open error";
+    for(uint32_t i=0; i < chunkNum; i++)
+        f.write((const char*)chunks[i], i==chunkNum-1 ? lastChunkSize : cBlkSize);
+    f.close();
 }

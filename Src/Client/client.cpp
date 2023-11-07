@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <random>
 #include <memory>
+#include <inttypes.h>
 
 #include <common.h>
 #include <classes.h>
@@ -44,6 +45,9 @@ static void usage() {
 }
 
 static bool quit;
+static int sockReq, sockAck;
+static sockaddr_in sinReq, sinAck;
+
 static void exitHandler(int sig) {
 	(void)sig;
 	quit = true;
@@ -88,40 +92,62 @@ int main(int argc, char **argv)
 		}
 	}
 	args.type();
+
+	// создать сокеты
+	sockReq = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if(sockReq < 0) {
+			errlog("socket(), %s", strerror(errno));
+			return -1;
+	}
+	sockAck = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if(sockAck < 0) {
+			errlog("socket(), %s", strerror(errno));
+			close(sockReq);
+			return -1;
+	}
+	log("sockets OK\n");
+
+	memset(&sinReq, 0, sizeof(sockaddr_in));
+	sinReq.sin_family = AF_INET;
+	sinReq.sin_port = htons(args.port);
+    assert(inet_aton(args.ip , &sinReq.sin_addr) != 0); 
+
+	memset(&sinAck, 0, sizeof(sockaddr_in));
+	sinAck.sin_family = AF_INET;
+	sinAck.sin_port = htons(args.port+1);
+    assert(inet_aton(args.ip , &sinAck.sin_addr) != 0); 
+
+	if(bind(sockAck, (sockaddr *)&sinAck, sizeof(sockaddr_in)) == -1) {
+		close(sockAck);
+		close(sockReq);
+		errlog(strerror(errno));
+		return -1;
+	}
+
+	initSignals();
+	log("begin...\n");
+
 	try{ run(); }
-	catch (char* e) {
+	catch (const char* e) {
 		log("exception \"%s\", terminated\n", e);
 	}
 
-	log("*	*	*	*	*	*	*\n"
+	puts("\n\n*	*	*	*	*	*	*\n"
 		"*	... it's the end, good luck!		*\n"
 		"*	*	*	*	*	*	*\n");
+
+	close(sockAck);
+	close(sockReq);
 	return 0;
 }
 
 static void run() {
-	// создать сокет на данный порт
-	int sock;
-	sockaddr_in sinServ;
-
-	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if(sock < 0) {
-			log("socket(), %s", strerror(errno));
-	}
-	log("socket OK\n");
-
-	memset(&sinServ, 0, sizeof(sockaddr_in));
-	sinServ.sin_family = AF_INET;
-	sinServ.sin_port = htons(args.port);
-
-    assert(inet_aton(args.ip , &sinServ.sin_addr) != 0); 
-
-	initSignals();
-	log("begin ...\n");
+	uint64_t fileID = getpid();
+	debug("file ID=%" PRIx64 "\n", fileID);
 
 	CSequence ffile(args.fileName);
 	auto packNum = ffile.GetTotal(); // количество пакетов 
-	CPacker reqPack(getpid(), packNum);
+	CPacker reqPack(fileID, packNum);
 
     // создать вектор    
     std::unique_ptr<int[]> loto(new int[packNum]);
@@ -133,31 +159,34 @@ static void run() {
 
 	// Читать файл и посылать пакеты серверу
 	uint32_t remoteCrc;
+	bool fileComplete = false; // сервер получил весь файл
 	for(size_t i=0;i<packNum && !quit;i++)  {
 		auto block = ffile.GetBlock(loto[i]);
 		auto data = reqPack.Pack(CPacker::eREQ, block.chunk, block.size, loto[i]);
 
-		// Отправка REQ
-		if (sendto(sock, data, PACK_SIZE(block.size), 0 , (sockaddr*)&sinServ, sizeof sinServ)==-1)
-		{
-			log("sendto(), %s\n", strerror(errno));
-			continue;
-		}
-		debug("send %u bytes, seq_num=%u\n", block.size, loto[i]);
-
-		// Получить ACK
 		int tryCount = 7; // семь попыток получить ACK
 		for(; tryCount;tryCount--) {
+			// Отправка REQ
+			if (sendto(sockReq, data, PACK_SIZE(block.size), 0 , (sockaddr*)&sinReq, sizeof sinReq)==-1)
+			{
+				log("sendto(), %s\n", strerror(errno));
+				continue;
+			}
+			debug("send REQ[%u bytes], seq_num=%u\n", block.size, loto[i]);
+
+			// Получить ACK
 			byte packet[PACK_SIZE(4)]; // 4 это размер CRC
 			size_t recvLen;
 			try {
-				recvLen = recvWithTout(sock, &sinServ, args.tmout, packet, sizeof packet);
+				recvLen = recvWithTout(sockAck, &sinAck, args.tmout, packet, sizeof packet);
 			}
 			catch(int i) {
-				if(i==args.tmout)
+				if(i==-args.tmout) {
+					debug("ACK timeout\n");
 					continue;	// таймаут, повторить
+				}
 				// ошибка, продолжить попытки
-				log("%s::%d: %s\n", __FILE__, i, strerror(errno));
+				errlog(strerror(errno));
 				continue;
 			}
 			// Распаковать ответ
@@ -168,7 +197,7 @@ static void run() {
 				continue; // продолжить попытки
 			}
 			if(ackHdr.type != CPacker::eACK) {
-				debug("не тот тип пакета ACK\n");
+				debug("не тот тип пакета\n");
 				continue; // продолжить попытки
 			}
 			if(ackHdr.id.ui64 != reqPack.GetID()) {
@@ -186,17 +215,28 @@ static void run() {
 			}
 			SPacket *p = (SPacket*)packet;
 			remoteCrc = ntohl(p->crc);
-			goto final;
+			fileComplete = true;
+			break;
 		}
 		if(!tryCount) {
 			throw "сервер не отвечает";
 		}
 	}
-	final:
+	if(!fileComplete) {
+		// Отправлены все блоки файла, но подтверждения от сервера не пришло
+		puts("\n\n"
+			"----------------------------\n"
+			"--     СБОЙ НА СЕРВЕРЕ    --\n"
+			"--    Сервер не прислал   --\n"
+			"--    завершающий пакет.  --\n"
+			"----------------------------\n"
+		);
+		return;
+	}
 	// Сервер прислал CRC принятого файла, сравнить с локальной CRC
 	uint32_t localCrc = ffile.GetCRC();
 	if(remoteCrc == localCrc) {
-		log(
+		printf("\n\n"
 			"++++++++++++++++++++++++++++\n"
 			"++      УСПЕШНО !         ++\n"
 			"++ CRC файла: %X\n"
@@ -205,7 +245,7 @@ static void run() {
 			localCrc, remoteCrc
 		);
 	} else {
-		log(
+		printf("\n\n"
 			"----------------------------\n"
 			"--        ОШИБКА          --\n"
 			"-- CRC файла: %X\n"
@@ -217,16 +257,12 @@ static void run() {
 }
 
 static size_t recvWithTout(int sock, sockaddr_in *peer, int timeoutMs, byte *buf, size_t bufSize) {
-	fd_set fds;
-	FD_ZERO(&fds) ;
-	FD_SET(sock, &fds) ;
 	timeval tv{0,timeoutMs*1000};
-	int n = select(sock, &fds, NULL, NULL, &tv);
-	if (!n)
-		throw timeoutMs;
-	else if(n==-1)
-		throw -__LINE__;
-
+	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
 	socklen_t lenAddr = sizeof *peer;
-	return recvfrom(sock, buf, bufSize, 0, (sockaddr*)peer, &lenAddr);	
+	ssize_t n = recvfrom(sock, buf, bufSize, 0, (sockaddr*)peer, &lenAddr);	
+	if (n<=0)
+		throw (int)-timeoutMs;
+	return n;
 }
+

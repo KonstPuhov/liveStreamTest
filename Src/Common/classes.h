@@ -3,6 +3,8 @@
 #include "common.h"
 #include <stdlib.h>
 #include <set>
+#include <map>
+#include <pthread.h>
 
 #pragma pack(push, 1)
 union uFileID {
@@ -17,7 +19,6 @@ struct SPackHeader{
     uint8_t type; // тип пакета: 0 == ACK, 1 == PUT
     uFileID id; // 8 байт - идентификатор, отличающий один файл от другого
 };
-#pragma pack(pop)
 
 const int MTU = 1500-28;
 const int PAYLOAD_MAXSIZE = MTU - sizeof(SPackHeader);
@@ -31,6 +32,7 @@ struct SPacket{
     uint32_t crc;
     };
 };
+#pragma pack(pop)
 
 // Упаковывает и распаковывает заголовки сетевых пакетов 
 class CPacker {
@@ -78,11 +80,32 @@ public:
     bool IsFull() { return chunkNum==total_seq; }
     uint32_t GetTotal() { return total_seq; }
     uint32_t GetCRC();
+    void StoreToFile(const char *fileName);
 
     struct SBlock {
         uint8_t *chunk; // содержимое блока
         size_t size; // размер содержимого (если блок последний, то размер может быть меньше заданного)
     };
     SBlock GetBlock(uint32_t idx);
+};
+
+class CMutex {
+	pthread_mutex_t mutex;
+public:
+	CMutex() {
+		pthread_mutex_init(&mutex, NULL);
+	}
+	~CMutex() {
+		pthread_mutex_destroy(&mutex);
+	}
+	void Lock() {
+		pthread_mutex_lock(&mutex);
+	}
+	void Unlock() {
+		pthread_mutex_unlock(&mutex);
+	}
+};
+
+class TSeriesMap: public std::map<uint64_t, CSequence*>, public CMutex {
 };
 
