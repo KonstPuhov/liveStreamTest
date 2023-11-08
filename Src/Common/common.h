@@ -27,3 +27,8 @@ static inline void _inl_log(const char *prefix, const char* file, int line, cons
 #else
 #define debug(...)
 #endif
+
+//  Расчёт задержки (us) между фреймами заданного размера для получения заданного битрейта(кБит/сек)
+static inline useconds_t bitrate2usecs(uint bitrate, size_t frameSz) {
+	return 1000000*frameSz / (bitrate*1000/8);
+}

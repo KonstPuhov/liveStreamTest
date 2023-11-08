@@ -72,7 +72,7 @@ static TSeriesMap fileMap;
 
 int main(int argc, char **argv)
 {
-	const char *opts = "vp:t:?";
+	const char *opts = "vb:p:t:?";
 	int opt;
 
 	while (opt = getopt(argc, argv, opts), opt != -1)
@@ -197,6 +197,13 @@ static void *thrServe(void *data)
 	// Положить чанк в массив по своему адресу
 	series->PutBlock(hdr.seq_number, netPack->payload, PAY_SIZE(sd->recvSize));
 
+	// Выдержать паузу для обеспечения нужного битрейта.
+	// Для упрощения время отклика клиента и время прохождения пакетов
+	// здесь не учитываются. Чтобы учитывать все факторы, нужно сохранять
+	// время отправки предыдущего пакета, сравнивать его с текущим временем и
+	// на их разность уменьшать длительность задержки.
+	usleep(bitrate2usecs(args.bitrate, PAYLOAD_MAXSIZE));
+
 	// Ответить клиенту
 	hdr.type = CPacker::eACK;
 	hdr.seq_number = series->GetTotal();
@@ -241,5 +248,4 @@ static void sendAck(int sock, sockaddr_in *peer, CPacker::SHead *hdr, CSequence 
 	if (sendto(sock, ack, PACK_SIZE(paySz), 0, (sockaddr *)peer, sizeof(sockaddr_in)) == -1)
 		errlog("sendto(ACK), %s\n", strerror(errno));
 	debug("send ACK seq_number=%d[pay=%d bytes] of %d\n", hdr->seq_number, paySz, hdr->seq_total);
-	
 }
