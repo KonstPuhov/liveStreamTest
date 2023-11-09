@@ -31,14 +31,15 @@ static struct
 
 static void usage()
 {
-	puts(
-		"Usage: server [option] ... (v." _VERSION_ ")\n"
+	printf(
+		"Usage: server [option] ... (%s)\n"
 		"Программа - UDP сервер,\n"
 		"Опции:\n"
 		"\t-p\t\tudp-порт\n"
 		"\t-b\t\tбитрейт, кбит/сек\n"
 		"\t-?\t\tвывод справки\n"
-		"\t-v\t\tвывод версии\n");
+		"\t-v\t\tвывод версии\n",
+		_version());
 }
 
 static bool quit;

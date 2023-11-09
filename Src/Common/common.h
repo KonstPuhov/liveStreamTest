@@ -3,12 +3,23 @@
 #include <stdio.h>
 #include <errno.h>
 
+#ifndef _VERSION_
 #define _VERSION_ "0.1"
+#endif
 
 typedef unsigned char byte;
 
+static inline const char* _version() {
+	int minor, major, build;
+	static char str[32];
+	if(sscanf(_VERSION_,"%d.%d-%d", &minor,&major,&build)==3) {
+		snprintf(str, 31, "v%d.%d.%d", minor, major, build);
+		return str;
+	}
+	return _VERSION_;
+}
 static inline void printVersion() {
-	puts(_VERSION_);
+	puts(_version());
 }
 
 // вывод отладки в stderr

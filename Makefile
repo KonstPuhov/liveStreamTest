@@ -1,7 +1,8 @@
 DEBUG ?= DEBUG
-#DEBUG ?= NO_DEBUG
+VERSION = $(shell git describe)
+
 CXX = g++
-CXXFLAGS = -Wall -Werror -Wextra -pedantic -std=c++17 -g -fsanitize=address -ISrc/Common -D$(DEBUG)
+CXXFLAGS = -Wall -Werror -Wextra -pedantic -std=c++17 -g -fsanitize=address -ISrc/Common -D$(DEBUG) -D_VERSION_=\"$(VERSION)\"
 LDFLAGS =  -fsanitize=address
 
 H_COM = $(shell find Src/Common -name '*.h')

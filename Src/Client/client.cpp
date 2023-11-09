@@ -31,8 +31,8 @@ static struct {
 } args = {"myCat.jpg", "127.0.0.1", 3210, 3211, 500 };
 
 static void usage() {
-	puts(
-	"Usage: client [option] ... (v." _VERSION_ ")\n"
+	printf(
+	"Usage: client [option] ... (%s)\n"
 	"Программа - UDP клиент,\n"
 	"Опции:\n"
 	"\t-f\t\tip-имя файла\n"
@@ -41,7 +41,8 @@ static void usage() {
 	"\t-с\t\tudp-порт клиента (для ACK)\n"
 	"\t-t\t\tтаймаут,мсек\n"
 	"\t-?\t\tвывод справки\n"
-	"\t-v\t\tвывод версии\n"
+	"\t-v\t\tвывод версии\n",
+	_version()
 	);
 }
 
