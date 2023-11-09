@@ -11,6 +11,8 @@ union uFileID {
     byte bytes[8];
     uint32_t ui32[2];
     uint64_t ui64;
+    uFileID() { }
+    uFileID(uint32_t ms, uint32_t ls) { ui32[0]=ls; ui32[1]=ms; }
 };
 // Пакеты REQ и ACK имеют одинаковый заголовок
 struct SPackHeader{

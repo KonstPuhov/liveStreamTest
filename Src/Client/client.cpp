@@ -24,11 +24,11 @@
 static struct {
     const char *fileName;
     const char *ip; // IP сервера
-	int port, tmout;
+	int portS,portC, tmout;
 	void type() {
-		printf("File: %s IP: %s Port:%d Timeout:%d\n", fileName, ip, port, tmout);
+		printf("File: %s IP: %s PortS:%d PortC:%d Timeout:%d\n", fileName, ip, portS, portC, tmout);
 	}
-} args = {"myCat.jpg", "127.0.0.1", 3210, 500 };
+} args = {"myCat.jpg", "127.0.0.1", 3210, 3211, 500 };
 
 static void usage() {
 	puts(
@@ -37,7 +37,8 @@ static void usage() {
 	"Опции:\n"
 	"\t-f\t\tip-имя файла\n"
 	"\t-i\t\tip-адрес сервера\n"
-	"\t-p\t\tudp-порт\n"
+	"\t-p\t\tudp-порт сервера\n"
+	"\t-с\t\tudp-порт клиента (для ACK)\n"
 	"\t-t\t\tтаймаут,мсек\n"
 	"\t-?\t\tвывод справки\n"
 	"\t-v\t\tвывод версии\n"
@@ -65,7 +66,7 @@ static size_t recvWithTout(int sock, sockaddr_in *peer, int timeoutMs, byte *buf
 
 int main(int argc, char **argv)
 {
-	const char *opts = "vp:t:?";
+	const char *opts = "vp:c:t:i:f:?";
 	int opt;
 	
 	while (opt = getopt(argc, argv, opts), opt!=-1) {
@@ -74,7 +75,10 @@ int main(int argc, char **argv)
 			printVersion();
 			exit(0);
 		case 'p':
-			args.port = atoi(optarg);
+			args.portS = atoi(optarg);
+			break;
+		case 'c':
+			args.portC = atoi(optarg);
 			break;
 		case 'f':
 			args.fileName = optarg;
@@ -109,12 +113,12 @@ int main(int argc, char **argv)
 
 	memset(&sinReq, 0, sizeof(sockaddr_in));
 	sinReq.sin_family = AF_INET;
-	sinReq.sin_port = htons(args.port);
+	sinReq.sin_port = htons(args.portS);
     assert(inet_aton(args.ip , &sinReq.sin_addr) != 0); 
 
 	memset(&sinAck, 0, sizeof(sockaddr_in));
 	sinAck.sin_family = AF_INET;
-	sinAck.sin_port = htons(args.port+1);
+	sinAck.sin_port = htons(args.portC);
     assert(inet_aton(args.ip , &sinAck.sin_addr) != 0); 
 
 	if(bind(sockAck, (sockaddr *)&sinAck, sizeof(sockaddr_in)) == -1) {
@@ -142,12 +146,13 @@ int main(int argc, char **argv)
 }
 
 static void run() {
-	uint64_t fileID = getpid();
-	debug("file ID=%" PRIx64 "\n", fileID);
+	// ID файла содержит ID процесса и номер порта ACK
+	uFileID fileID(getpid(), args.portC);
+	debug("file ID=%" PRIu64 "\n", fileID.ui64);
 
 	CSequence ffile(args.fileName);
 	auto packNum = ffile.GetTotal(); // количество пакетов 
-	CPacker reqPack(fileID, packNum);
+	CPacker reqPack(fileID.ui64, packNum);
 
     // создать вектор    
     std::unique_ptr<int[]> loto(new int[packNum]);
@@ -162,6 +167,9 @@ static void run() {
 	bool fileComplete = false; // сервер получил весь файл
 	for(size_t i=0;i<packNum && !quit;i++)  {
 		auto block = ffile.GetBlock(loto[i]);
+		if(!block.chunk) {
+			throw "внутренняя ошибка";
+		}
 		auto data = reqPack.Pack(CPacker::eREQ, block.chunk, block.size, loto[i]);
 
 		int tryCount = 7; // семь попыток получить ACK

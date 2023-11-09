@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 		debug("recvLen=%d\n", sd->recvSize);
 		if ((size_t)sd->recvSize <= sizeof(SPackHeader))
 		{
-			errlog("пакет ACK слишком мал\n");
+			errlog("пакет REQ слишком мал\n");
 			delete sd;
 			continue;
 		}
@@ -151,7 +151,7 @@ int main(int argc, char **argv)
 
 // Вызывается по завершению передачи файла
 static void onFileComplete(uint64_t fileID) {
-	log("file %" PRIx64 " complete", fileID);
+	log("file %" PRIu64 " complete", fileID);
 	std::stringstream fn;
 	fn << fileID << ".bin";
 	try {
@@ -184,7 +184,7 @@ static void *thrServe(void *data)
 		  sd->peerAdr.sin_addr.s_addr);
 
 	// Найти серию по ID
-	debug("file ID=%" PRIx64 "\n", hdr.id.ui64);
+	debug("file ID=%" PRIu64 "\n", hdr.id.ui64);
 	CSequence *series;
 	auto f = fileMap.find(hdr.id.ui64);
 	// Если серии с таким ID ещё нет, то создать
@@ -218,7 +218,7 @@ static void *thrServe(void *data)
 	sockaddr_in sinAck;
 	memset(&sinAck, 0, sizeof(sockaddr_in));
 	sinAck.sin_family = AF_INET;
-	sinAck.sin_port = htons(args.port+1);
+	sinAck.sin_port = htons(hdr.id.ui32[0]); // порт для ACK упакован в ID
 	sinAck.sin_addr.s_addr = sd->peerAdr.sin_addr.s_addr;
 	sendAck(sockAck, &sinAck, &hdr, series);
 	if(series->IsFull())

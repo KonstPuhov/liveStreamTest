@@ -63,7 +63,7 @@ uint32_t CSequence::GetCRC() {
     return ~crc;
 }
 
-CSequence::CSequence(const char *fName){
+CSequence::CSequence(const char *fName): total_seq(0), lastChunkSize(-1) {
     // Сначала определить размер файла
     struct stat st;
     if(stat(fName, &st) < 0)

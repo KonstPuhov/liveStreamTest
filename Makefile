@@ -1,3 +1,5 @@
+DEBUG ?= DEBUG
+#DEBUG ?= NO_DEBUG
 CXX = g++
 CXXFLAGS = -Wall -Werror -Wextra -pedantic -std=c++17 -g -fsanitize=address -ISrc/Common -D$(DEBUG)
 LDFLAGS =  -fsanitize=address
@@ -14,7 +16,7 @@ OBJ_C = $(SRC_C:.cpp=.o)
 EXEC_S = server
 EXEC_C = client
 
-.PHONY: all
+.PHONY: all run clean
 all: $(EXEC_S) $(EXEC_C)
 
 $(OBJ_S): $(SRC_S) $(H_S) $(H_COM) Makefile
@@ -27,4 +29,10 @@ $(EXEC_C): $(OBJ_C)
 	$(CXX) $(LDFLAGS) -o $@ $(OBJ_C) $(LBLIBS)
 
 clean:
-	rm -rf $(OBJ_S) $(EXEC_S) $(OBJ_C) $(EXEC_C)
+	rm -rf $(OBJ_S) $(EXEC_S) $(OBJ_C) $(EXEC_C) *.bin
+
+run: all
+	./server -b1000 &
+	./client -fmyDog.jpg -c3211 &
+	./client -fmyCat.jpg -c3212
+	killall server
